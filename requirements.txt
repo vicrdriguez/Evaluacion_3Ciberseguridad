@@ -6,5 +6,5 @@ Jinja2==3.1.6
 gunicorn==27.0.1
 prometheus-client==0.26.0
 Jinja2==3.1.6
-gunicorn==21.2.0
+gunicorn==27.0.1
 prometheus-client==0.17.1
