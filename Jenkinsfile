@@ -51,10 +51,53 @@ pipeline {
 
         // >>> [SEGURIDAD]: aquí van las etapas "Security Review (SAST)" y "Dependency Management"
 
+          stage('Security Review (SAST)') {
+            steps {
+                sh 'bandit -f json -o reports/bandit.json app.py || true'
+                sh 'bandit -f txt -o reports/bandit.txt app.py || true'
+                sh 'cat reports/bandit.txt'
+                script {
+                    def rc = sh(returnStatus: true, script: 'bandit -q -ll app.py')
+                    if (rc != 0) { unstable('Bandit encontró hallazgos Medium/High') }
+                }
+            }
+        }
+
+        stage('Dependency Management') {
+            steps {
+                sh 'pip-audit -r requirements.txt -f json -o reports/pip-audit.json || true'
+                script {
+                    def rc = sh(returnStatus: true, script: 'pip-audit -r requirements.txt > reports/pip-audit.txt 2>&1')
+                    sh 'cat reports/pip-audit.txt'
+                    if (rc != 0) { unstable('pip-audit encontró dependencias vulnerables') }
+                }
+            }
+        }
+        
+
         // >>> [ZAP]: aquí van las etapas "Deploy Staging" y "DAST - OWASP ZAP"
+        stage('Deploy Staging') {
+            steps {
+                sh 'bash scripts/deploy.sh staging 5001'
+            }
+        }
+
+        stage('DAST - OWASP ZAP') {
+            steps {
+                script {
+                    def rc = sh(returnStatus: true, script: 'python3 scripts/zap_scan.py http://jenkins:5001')
+                    if (rc == 2) { unstable('OWASP ZAP encontró alertas High/Medium') }
+                    else if (rc != 0) { error("ZAP no pudo ejecutarse (código ${rc})") }
+                }
+            }
+        }
 
         stage('Deploy Producción') {
             // >>> [GATE]: aquí va la condición "when" que protege producción
+             when {
+                expression { currentBuild.currentResult == 'SUCCESS' }
+            }
+
             steps {
                 sh 'bash scripts/deploy.sh produccion 5000'
                 script { env.PRODUCCION = env.APP_VERSION }
